@@ -1,0 +1,53 @@
+name: Validation Software CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: silabs_val_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Apply Database Schema
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d silabs_val_db -f schema.sql
+          PGPASSWORD=postgres psql -h localhost -U postgres -d silabs_val_db -c "INSERT INTO test_sessions (device_family, device_id, firmware_version) VALUES ('EFR32MG24', 'SL_BOARD_REF_01', 'v2.4.1-val');"
+
+      - name: Run Jest Test Suite
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: silabs_val_db
+          PGPORT: 5432
+        run: npm test

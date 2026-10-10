@@ -127,7 +127,5 @@ app.get('/api/stats', async (req: Request, res: Response) => {
     }
 });
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`[Collector Server] Running on http://0.0.0.0:${PORT}`);
-});
+export { app, server };
+export default app;
