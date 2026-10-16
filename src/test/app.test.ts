@@ -48,7 +48,7 @@ describe('POST /api/telemetry Ingestion Endpoint', () => {
       validation: { status: 'FAIL', errors: ['ERR_OVERHEAT_CRITICAL'] }
     };
 
-    const response = await request('http://localhost:3000')
+    const response = await request(app)
       .post('/api/telemetry')
       .send(mockOverheatPayload);
 
@@ -56,7 +56,7 @@ describe('POST /api/telemetry Ingestion Endpoint', () => {
     expect(response.body).toHaveProperty('success', true);
 
     // Verify backend persists the critical failure status
-    const recentRes = await request('http://localhost:3000').get('/api/telemetry/recent');
+    const recentRes = await request(app).get('/api/telemetry/recent');
     const insertedSample = recentRes.body.find((item: any) => item.seq_number === 1001);
     expect(insertedSample).toBeDefined();
     expect(insertedSample.validation_status).toBe('FAIL');
@@ -75,7 +75,7 @@ describe('POST /api/telemetry Ingestion Endpoint', () => {
       }
     };
 
-    const response = await request('http://localhost:3000')
+    const response = await request(app)
       .post('/api/telemetry')
       .send(mockMultiFaultPayload);
 
@@ -93,7 +93,7 @@ describe('POST /api/telemetry Ingestion Endpoint', () => {
       validation: { status: 'PASS', errors: [] }
     };
 
-    const response = await request('http://localhost:3000')
+    const response = await request(app)
       .post('/api/telemetry')
       .send(mockPassPayload);
 
