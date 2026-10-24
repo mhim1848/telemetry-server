@@ -1,7 +1,16 @@
 import request from 'supertest';
-import { app } from '../app';
+import { app, pool } from '../app';
 
 describe('POST /api/telemetry Ingestion Endpoint', () => {
+    const insertedTelemetryIds: string[] = [];
+
+    afterAll(async () => {
+        if (insertedTelemetryIds.length > 0) {
+            await pool.query('DELETE FROM telemetry_logs WHERE id = ANY($1)', [insertedTelemetryIds]);
+        }
+        await pool.end();
+    });
+
     it('should process valid telemetry payload and return 201', async () => {
         const mockPayload = {
             session_id: 1,
@@ -15,6 +24,8 @@ describe('POST /api/telemetry Ingestion Endpoint', () => {
         const response = await request(app)
             .post('/api/telemetry')
             .send(mockPayload);
+
+        if (response.body?.telemetry_id) insertedTelemetryIds.push(response.body.telemetry_id);
 
         expect(response.status).toBe(201);
         expect(response.body).toHaveProperty('success', true);
@@ -35,6 +46,8 @@ describe('POST /api/telemetry Ingestion Endpoint', () => {
             .post('/api/telemetry')
             .send(mockPayload);
 
+        if (response.body?.telemetry_id) insertedTelemetryIds.push(response.body.telemetry_id);
+
         expect(response.status).toBe(201);
     });
 
@@ -51,6 +64,8 @@ describe('POST /api/telemetry Ingestion Endpoint', () => {
     const response = await request(app)
       .post('/api/telemetry')
       .send(mockOverheatPayload);
+
+    if (response.body?.telemetry_id) insertedTelemetryIds.push(response.body.telemetry_id);
 
     expect(response.status).toBe(201);
     expect(response.body).toHaveProperty('success', true);
@@ -79,6 +94,8 @@ describe('POST /api/telemetry Ingestion Endpoint', () => {
       .post('/api/telemetry')
       .send(mockMultiFaultPayload);
 
+    if (response.body?.telemetry_id) insertedTelemetryIds.push(response.body.telemetry_id);
+
     expect(response.status).toBe(201);
     expect(response.body).toHaveProperty('telemetry_id');
   });
@@ -96,6 +113,8 @@ describe('POST /api/telemetry Ingestion Endpoint', () => {
     const response = await request(app)
       .post('/api/telemetry')
       .send(mockPassPayload);
+
+    if (response.body?.telemetry_id) insertedTelemetryIds.push(response.body.telemetry_id);
 
     expect(response.status).toBe(201);
     expect(response.body.success).toBe(true);
