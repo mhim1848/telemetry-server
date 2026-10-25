@@ -2,70 +2,72 @@ import request from 'supertest';
 import { app, pool } from '../app';
 
 describe('POST /api/telemetry Ingestion Endpoint', () => {
-    const insertedTelemetryIds: string[] = [];
+  // Each run creates its own session and tears it down, so the suite is hermetic:
+  // it no longer depends on a pre-seeded `session_id = 1`. Deleting the session
+  // cascades to its telemetry_logs and test_faults (ON DELETE CASCADE).
+  let sessionId: number;
 
-    afterAll(async () => {
-        if (insertedTelemetryIds.length > 0) {
-            await pool.query('DELETE FROM telemetry_logs WHERE id = ANY($1)', [insertedTelemetryIds]);
-        }
-        await pool.end();
+  beforeAll(async () => {
+    const res = await request(app).post('/api/sessions').send({
+      device_family: 'EFR32MG24',
+      device_id: 'TEST_REF_01',
+      firmware_version: 'v2.4.1-test',
     });
+    expect(res.status).toBe(201);
+    sessionId = res.body.id;
+    expect(typeof sessionId).toBe('number');
+  });
 
-    it('should process valid telemetry payload and return 201', async () => {
-        const mockPayload = {
-            session_id: 1,
-            seq: 999,
-            timestamp: new Date().toISOString(),
-            device: { family: 'EFR32MG24', id: 'TEST_REF_01', fw: 'v2.4.1' },
-            metrics: { voltage_mv: 3250.0, temp_c: 45.0, rssi_dbm: -65.0 },
-            validation: { status: 'PASS', errors: [] }
-        };
+  afterAll(async () => {
+    if (sessionId) {
+      await pool.query('DELETE FROM test_sessions WHERE id = $1', [sessionId]);
+    }
+    await pool.end();
+  });
 
-        const response = await request(app)
-            .post('/api/telemetry')
-            .send(mockPayload);
+  it('should process valid telemetry payload and return 201', async () => {
+    const mockPayload = {
+      session_id: sessionId,
+      seq: 999,
+      timestamp: new Date().toISOString(),
+      device: { family: 'EFR32MG24', id: 'TEST_REF_01', fw: 'v2.4.1' },
+      metrics: { voltage_mv: 3250.0, temp_c: 45.0, rssi_dbm: -65.0 },
+      validation: { status: 'PASS', errors: [] },
+    };
 
-        if (response.body?.telemetry_id) insertedTelemetryIds.push(response.body.telemetry_id);
+    const response = await request(app).post('/api/telemetry').send(mockPayload);
 
-        expect(response.status).toBe(201);
-        expect(response.body).toHaveProperty('success', true);
-        expect(response.body).toHaveProperty('telemetry_id');
-    });
+    expect(response.status).toBe(201);
+    expect(response.body).toHaveProperty('success', true);
+    expect(response.body).toHaveProperty('telemetry_id');
+  });
 
-    it('should handle low voltage payload and record validation warning', async () => {
-        const mockPayload = {
-            session_id: 1,
-            seq: 1000,
-            timestamp: new Date().toISOString(),
-            device: { family: 'EFR32MG24', id: 'TEST_REF_01', fw: 'v2.4.1' },
-            metrics: { voltage_mv: 2900.0, temp_c: 45.0, rssi_dbm: -65.0 },
-            validation: { status: 'WARN', errors: ['WARN_LOW_VOLTAGE'] }
-        };
+  it('should handle low voltage payload and record validation warning', async () => {
+    const mockPayload = {
+      session_id: sessionId,
+      seq: 1000,
+      timestamp: new Date().toISOString(),
+      device: { family: 'EFR32MG24', id: 'TEST_REF_01', fw: 'v2.4.1' },
+      metrics: { voltage_mv: 2900.0, temp_c: 45.0, rssi_dbm: -65.0 },
+      validation: { status: 'WARN', errors: ['WARN_LOW_VOLTAGE'] },
+    };
 
-        const response = await request(app)
-            .post('/api/telemetry')
-            .send(mockPayload);
+    const response = await request(app).post('/api/telemetry').send(mockPayload);
 
-        if (response.body?.telemetry_id) insertedTelemetryIds.push(response.body.telemetry_id);
+    expect(response.status).toBe(201);
+  });
 
-        expect(response.status).toBe(201);
-    });
-
-    it('should process critical overheat payload and record ERR_OVERHEAT_CRITICAL', async () => {
+  it('should process critical overheat payload and record ERR_OVERHEAT_CRITICAL', async () => {
     const mockOverheatPayload = {
-      session_id: 1,
+      session_id: sessionId,
       seq: 1001,
       timestamp: new Date().toISOString(),
       device: { family: 'EFR32MG24', id: 'TEST_REF_01', fw: 'v2.4.1' },
       metrics: { voltage_mv: 3300.0, temp_c: 82.5, rssi_dbm: -60.0 }, // Temp > 75°C
-      validation: { status: 'FAIL', errors: ['ERR_OVERHEAT_CRITICAL'] }
+      validation: { status: 'FAIL', errors: ['ERR_OVERHEAT_CRITICAL'] },
     };
 
-    const response = await request(app)
-      .post('/api/telemetry')
-      .send(mockOverheatPayload);
-
-    if (response.body?.telemetry_id) insertedTelemetryIds.push(response.body.telemetry_id);
+    const response = await request(app).post('/api/telemetry').send(mockOverheatPayload);
 
     expect(response.status).toBe(201);
     expect(response.body).toHaveProperty('success', true);
@@ -79,22 +81,18 @@ describe('POST /api/telemetry Ingestion Endpoint', () => {
 
   it('should handle simultaneous multi-fault payload cleanly', async () => {
     const mockMultiFaultPayload = {
-      session_id: 1,
+      session_id: sessionId,
       seq: 1002,
       timestamp: new Date().toISOString(),
       device: { family: 'EFR32MG24', id: 'TEST_REF_01', fw: 'v2.4.1' },
       metrics: { voltage_mv: 2750.0, temp_c: 78.0, rssi_dbm: -88.0 }, // Both Voltage < 2850mV & Temp > 75°C
       validation: {
         status: 'FAIL',
-        errors: ['ERR_BROWNOUT_DETECTED', 'ERR_OVERHEAT_CRITICAL', 'WARN_WEAK_RSSI']
-      }
+        errors: ['ERR_BROWNOUT_DETECTED', 'ERR_OVERHEAT_CRITICAL', 'WARN_WEAK_RSSI'],
+      },
     };
 
-    const response = await request(app)
-      .post('/api/telemetry')
-      .send(mockMultiFaultPayload);
-
-    if (response.body?.telemetry_id) insertedTelemetryIds.push(response.body.telemetry_id);
+    const response = await request(app).post('/api/telemetry').send(mockMultiFaultPayload);
 
     expect(response.status).toBe(201);
     expect(response.body).toHaveProperty('telemetry_id');
@@ -102,19 +100,15 @@ describe('POST /api/telemetry Ingestion Endpoint', () => {
 
   it('should confirm nominal telemetry yields 100% PASS status with empty fault array', async () => {
     const mockPassPayload = {
-      session_id: 1,
+      session_id: sessionId,
       seq: 1003,
       timestamp: new Date().toISOString(),
       device: { family: 'EFR32MG24', id: 'TEST_REF_01', fw: 'v2.4.1' },
       metrics: { voltage_mv: 3280.0, temp_c: 42.0, rssi_dbm: -55.0 }, // All nominal
-      validation: { status: 'PASS', errors: [] }
+      validation: { status: 'PASS', errors: [] },
     };
 
-    const response = await request(app)
-      .post('/api/telemetry')
-      .send(mockPassPayload);
-
-    if (response.body?.telemetry_id) insertedTelemetryIds.push(response.body.telemetry_id);
+    const response = await request(app).post('/api/telemetry').send(mockPassPayload);
 
     expect(response.status).toBe(201);
     expect(response.body.success).toBe(true);

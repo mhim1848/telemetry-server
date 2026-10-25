@@ -1,23 +1,38 @@
 {
   "name": "telemetry-server",
   "version": "1.0.0",
-  "description": "",
-  "main": "dist/index.js",
+  "description": "Telemetry collector server for EFR32 IC validation: ingests device telemetry over HTTP, persists to PostgreSQL, and broadcasts live updates over WebSockets.",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "lint": "eslint .",
+    "format": "prettier --write .",
     "test": "jest"
   },
   "devDependencies": {
+    "@eslint/js": "^9.14.0",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
-    "@types/node": "^26.6.4",
+    "@types/node": "^24.0.0",
     "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
+    "@types/ws": "^8.18.2",
+    "eslint": "^9.14.0",
+    "eslint-config-prettier": "^9.1.0",
     "jest": "^30.5.2",
+    "prettier": "^3.3.3",
     "supertest": "^7.3.1",
     "ts-jest": "^29.4.14",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.13.0"
   },
   "private": true,
   "keywords": [],
@@ -25,10 +40,11 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@types/ws": "^8.18.2",
+    "cors": "^2.8.6",
     "dotenv": "^18.0.6",
     "express": "^5.2.1",
     "pg": "^8.23.1",
-    "ws": "^8.22.0"
+    "ws": "^8.22.0",
+    "zod": "^4.6.7"
   }
 }

@@ -12,3 +12,13 @@ yarn-error.log*
 
 schema.sql
 /.idea/
+
+# OS cruft
+.DS_Store
+**/.DS_Store
+
+# Environment & build output
+.env
+.env.*
+!.env.example
+/dist
