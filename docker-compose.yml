@@ -50,5 +50,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # Builds the sibling telemetry-frontend repo and serves the static bundle via nginx.
+  # Served on 5173 to match the server's CORS_ORIGIN above. The browser (not this
+  # container) calls the server at localhost:3000, so the VITE_* URLs point there.
+  frontend:
+    build:
+      context: ../telemetry-frontend
+      args:
+        VITE_API_URL: http://localhost:3000
+        VITE_WS_URL: ws://localhost:3000
+    ports:
+      - '5173:80'
+    depends_on:
+      - server
+
 volumes:
   pgdata:
