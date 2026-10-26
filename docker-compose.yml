@@ -1,0 +1,54 @@
+# Local full-stack run: `docker compose up --build`.
+# The values below are LOCAL DEVELOPMENT defaults — safe to commit. For any real
+# deployment, override them with your orchestrator's env/secret management
+# (especially PGPASSWORD and INGEST_API_KEY).
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: silabs_val_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d silabs_val_db']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build: .
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      PGHOST: postgres
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: silabs_val_db
+      PGSSL: 'false'
+      # Concrete origin + key so the production-mode config guard is satisfied.
+      CORS_ORIGIN: 'http://localhost:5173'
+      INGEST_API_KEY: 'local-dev-key'
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

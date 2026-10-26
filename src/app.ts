@@ -1,8 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import http from 'http';
+import pinoHttp from 'pino-http';
 import { config } from './config';
 import { pool } from './db/pool';
+import { logger } from './logger';
 import { initWebSocketServer } from './ws/broadcast';
 import { healthRouter } from './routes/health';
 import { telemetryRouter } from './routes/telemetry';
@@ -11,6 +13,10 @@ import { statsRouter } from './routes/stats';
 import { notFoundHandler, errorHandler } from './middleware/error-handler';
 
 const app = express();
+
+// Per-request structured logging with an auto-generated request id (first, so it
+// captures every request including ones rejected by later middleware).
+app.use(pinoHttp({ logger }));
 
 // Reject oversized bodies early — telemetry samples are tiny.
 app.use(express.json({ limit: '64kb' }));

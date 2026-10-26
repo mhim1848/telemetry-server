@@ -1,7 +1,70 @@
 # Architecture Decisions
 
-Short, dated notes on *why* things are the way they are — the tradeoffs behind the
+Short, dated notes on _why_ things are the way they are — the tradeoffs behind the
 productization of this telemetry collector. Newest first.
+
+## Day 2 — Data layer, observability, resilience, Docker
+
+**Migrations via node-pg-migrate.** Schema changes are now ordered, versioned, and
+applied exactly once (tracked in `pgmigrations`), replacing the ad-hoc
+`CREATE TABLE IF NOT EXISTS` in `schema.sql` (now deleted). The runner (`src/db/migrate.ts`)
+reuses the same validated `config` as the app, so both always target the same DB. Chose
+node-pg-migrate over Flyway because it's a Node-native npm package — no JVM toolchain in
+the app image.
+
+_On the init migration's idempotency:_ a true greenfield first migration would be plain
+(`CREATE TABLE foo`, assuming an empty DB and failing loudly otherwise). Ours is the
+exception — written idempotently (`CREATE TABLE IF NOT EXISTS`) solely to **adopt** a DB
+already provisioned out-of-band (your dev DB from the old `schema.sql`) without erroring.
+We could instead have made the baseline **destructive** (`DROP TABLE IF EXISTS … ; CREATE
+TABLE …`) to force a clean, known schema, but chose not to because it would wipe the
+existing data — the idempotent approach adopts the current tables and keeps their rows.
+Every migration after the baseline is plain and non-idempotent on purpose: the framework
+already guarantees once-only, in-order execution (via `pgmigrations`), and plain
+statements **fail loudly** on unexpected state instead of silently no-op'ing and masking
+drift.
+
+**Structured logging with pino + pino-http.** JSON in production, pretty in dev, silent
+in test. `pino-http` logs every request with an auto-generated request id. Replaces
+scattered `console.*` (config bootstrap still uses `console` — it runs before the logger).
+The level is chosen from a per-environment lookup map (`LEVEL_BY_ENV`) and overridable at
+runtime via `LOG_LEVEL`, so verbosity can be raised without a code change.
+
+**Liveness vs. readiness.** `/health` reports the process is up; `/ready` runs `SELECT 1`
+and returns `503` (not `500`) when the DB is unreachable, so orchestrators distinguish
+"not ready yet" from "crashed".
+
+**Graceful shutdown + process guards.** On SIGTERM/SIGINT: terminate WS clients (their
+long-lived upgrades would otherwise hold the HTTP server open), close the server, drain
+the pool — with a 10s force-exit fallback. `unhandledRejection`/`uncaughtException` are
+logged (the latter exits), so failures are visible instead of silent.
+
+**WebSocket heartbeat + origin check.** Ping/pong every 30s terminates dead sockets
+(e.g. a slept laptop) so broadcasts don't pile up. The handshake rejects disallowed
+origins using the same `CORS_ORIGIN` allow-list as HTTP.
+
+**Ingest auth on write routes only.** `X-API-Key` (constant-time compared) is required on
+POST telemetry/sessions and PATCH session; reads and the dashboard WS stay open so the
+frontend needs no secret. No-op when no key is configured (dev); production config
+guarantees a key is set.
+
+**Session lifecycle endpoints.** Added `GET /api/sessions`, `GET /api/sessions/:id`, and
+`PATCH /api/sessions/:id` (status), rounding the resource out from create-only so a client
+can list runs and close one (RUNNING → COMPLETED). `PATCH` has a concrete consumer coming
+(the Day 3 Pi client marks a run COMPLETED/FAILED on exit). The two `GET`s are currently
+**unconsumed** — added for REST completeness and as the backing for a potential future
+session-picker/history UI (see the optional post-Day-4 step in the plan). Kept rather than
+trimmed by choice.
+
+**Dockerized (server + Postgres).** Multi-stage `Dockerfile` (build → slim non-root
+runtime) runs migrations then starts the server. `docker-compose.yml` brings up Postgres +
+server with healthchecks; compose runs in `NODE_ENV=production` with a concrete CORS
+origin and API key so the production config guard is exercised. Frontend joins compose on
+Day 3.
+
+**tsconfig → nodenext + isolatedModules.** Needed so TypeScript resolves packages that
+expose types through an `exports` map (node-pg-migrate); `isolatedModules` keeps every
+file independently transpilable (and quiets ts-jest).
 
 ## Day 1 — Server foundation
 
@@ -12,7 +75,7 @@ each piece unit-testable and keeps the WebSocket concern out of the data layer (
 route broadcasts the value the service returns).
 
 **zod for runtime validation (v4).** Untrusted request bodies are parsed against a
-schema at the edge. One schema gives both the runtime check *and* the static type via
+schema at the edge. One schema gives both the runtime check _and_ the static type via
 `z.infer`, so there is a single source of truth and no hand-maintained interface that
 can drift. Numeric bounds mirror the DB column capacities, so bad data is rejected as a
 `400` instead of surfacing later as a Postgres overflow. (Previously `req.body` was

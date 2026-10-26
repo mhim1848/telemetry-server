@@ -42,6 +42,9 @@ const envSchema = z.object({
 
   // Shared secret required on ingest/write routes. Optional in dev, enforced in prod.
   INGEST_API_KEY: z.string().min(1).optional(),
+
+  // Optional override for the logger's level; falls back to a per-environment default.
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -72,6 +75,7 @@ export const config = {
   port: env.PORT,
   corsOrigin: env.CORS_ORIGIN,
   ingestApiKey: env.INGEST_API_KEY,
+  logLevel: env.LOG_LEVEL,
   db: {
     host: env.PGHOST,
     port: env.PGPORT,

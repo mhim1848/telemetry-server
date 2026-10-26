@@ -19,3 +19,13 @@ export const createSessionSchema = z.object({
 });
 
 export type CreateSessionInput = z.infer<typeof createSessionSchema>;
+
+export const sessionStatusSchema = z.enum(['RUNNING', 'COMPLETED', 'FAILED']);
+export type SessionStatus = z.infer<typeof sessionStatusSchema>;
+
+/** Payload for updating a session's lifecycle status (e.g. closing a run). */
+export const updateSessionSchema = z.object({
+  status: sessionStatusSchema,
+});
+
+export type UpdateSessionInput = z.infer<typeof updateSessionSchema>;
