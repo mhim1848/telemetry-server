@@ -1,18 +1,18 @@
-name: Validation Software CI/CD Pipeline
+name: telemetry-server CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, 'feature/**']
   pull_request:
     branches: [main, master]
 
 jobs:
-  build-and-test:
+  build-test:
     runs-on: ubuntu-latest
 
     services:
       postgres:
-        image: postgres:15
+        image: postgres:15-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -25,29 +25,34 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: silabs_val_db
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 22
+          cache: npm
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: npm ci
 
-      - name: Apply Database Schema
-        run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -d silabs_val_db -f schema.sql
-          PGPASSWORD=postgres psql -h localhost -U postgres -d silabs_val_db -c "INSERT INTO test_sessions (device_family, device_id, firmware_version) VALUES ('EFR32MG24', 'SL_BOARD_REF_01', 'v2.4.1-val');"
+      - name: Lint
+        run: npm run lint
 
-      - name: Run Jest Test Suite
-        env:
-          PGHOST: localhost
-          PGUSER: postgres
-          PGPASSWORD: postgres
-          PGDATABASE: silabs_val_db
-          PGPORT: 5432
+      - name: Build
+        run: npm run build
+
+      - name: Apply migrations
+        run: npm run migrate
+
+      - name: Test
         run: npm test

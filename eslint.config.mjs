@@ -38,6 +38,8 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-argument': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
+      // Jest mocks frequently reference methods unbound (e.g. jest.mocked(obj.fn)).
+      '@typescript-eslint/unbound-method': 'off',
     },
   },
   {

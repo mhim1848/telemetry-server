@@ -113,4 +113,23 @@ describe('POST /api/telemetry Ingestion Endpoint', () => {
     expect(response.status).toBe(201);
     expect(response.body.success).toBe(true);
   });
+
+  it('GET /api/stats returns the aggregate count fields', async () => {
+    const res = await request(app).get('/api/stats');
+    expect(res.status).toBe(200);
+    for (const key of ['total_samples', 'pass_count', 'warn_count', 'fail_count']) {
+      expect(res.body).toHaveProperty(key);
+      expect(Number.isNaN(Number(res.body[key]))).toBe(false);
+    }
+  });
+
+  it('rejects a malformed telemetry payload with 400 and error details', async () => {
+    const res = await request(app)
+      .post('/api/telemetry')
+      .send({ session_id: sessionId, seq: 1, timestamp: new Date().toISOString() }); // no metrics/validation
+
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('error');
+    expect(Array.isArray(res.body.details)).toBe(true);
+  });
 });

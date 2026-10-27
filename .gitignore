@@ -21,3 +21,6 @@ yarn-error.log*
 .env.*
 !.env.example
 /dist
+
+# Personal interview prep (not part of the project)
+INTERVIEW_NOTES.md

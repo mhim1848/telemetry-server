@@ -3,6 +3,28 @@
 Short, dated notes on _why_ things are the way they are — the tradeoffs behind the
 productization of this telemetry collector. Newest first.
 
+## Day 4 — CI, test depth, docs
+
+**Test depth across the risk surface.** Added coverage for `/api/stats` shape, malformed
+payload → 400, the API-key middleware (401/ok, unit-tested with a mocked config — no env
+mutation, no DB), WebSocket broadcast (a real `ws` client receives `NEW_TELEMETRY` on
+ingest, with the HTTP server actually listening), and transaction rollback (service unit
+test with a mocked pool asserting `ROLLBACK` + client release, no COMMIT). Integration
+tests stay on a real Postgres and are hermetic (own session, cascade cleanup).
+
+**Separate build tsconfig.** `tsconfig.json` includes `src` (so ESLint's type-aware
+project service and ts-jest see the tests); `tsconfig.build.json` extends it and excludes
+`src/test`, and `npm run build` uses it — so tests are type-checked but never emitted into
+`dist`/the Docker image.
+
+**CI hardened + per-repo.** The server workflow now runs lint + build + migrations (instead
+of piping the deleted `schema.sql`) + tests against a Postgres service container, on
+`actions/*@v4`, and also triggers on `feature/**`. Each repo carries its own workflow
+(frontend: lint/test/build; telemetry-pi: ruff/mypy/pytest) since they're independent repos.
+
+**Docs.** Added a hub README with a Mermaid architecture diagram and API table, plus a short
+AI-assisted-development note. A gitignored `INTERVIEW_NOTES.md` holds personal prep.
+
 ## Day 2 — Data layer, observability, resilience, Docker
 
 **Migrations via node-pg-migrate.** Schema changes are now ordered, versioned, and
